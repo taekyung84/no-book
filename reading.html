@@ -190,53 +190,69 @@ function initAudio() {
       sharedAudioCtx = new AudioContext();
     }
   }
-  // If suspended (common on mobile), try to resume
+  // Try to resume if exists
   if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
     sharedAudioCtx.resume().catch(e => console.log("Audio resume failed:", e));
   }
 }
 
-// 🔊 효과음 함수
+// 🔊 효과음 함수 (개선됨: 비동기 resume 처리)
 function playGameBeep(type = 'normal') {
-  if (!sharedAudioCtx) initAudio(); // Try to init if missing
+  if (!sharedAudioCtx) initAudio();
   if (!sharedAudioCtx) return;
 
   const ctx = sharedAudioCtx;
-  const gain = ctx.createGain();
-  gain.connect(ctx.destination);
-  
-  const now = ctx.currentTime;
-  const osc = ctx.createOscillator();
-  
-  if (type === 'success') {
-    // 🏆 승리/완료 사운드
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(523.25, now); // C5
-    osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
-    osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
-    osc.frequency.setValueAtTime(1046.50, now + 0.3); // C6
-    gain.gain.setValueAtTime(0.2, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
-    osc.start(now);
-    osc.stop(now + 1.5);
-  } else if (type === 'start') {
-    // 🚀 시작 사운드 (상승음)
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(440, now);
-    osc.frequency.exponentialRampToValueAtTime(880, now + 0.1);
-    gain.gain.setValueAtTime(0.3, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
-    osc.start(now);
-    osc.stop(now + 0.4);
+
+  // 실제 소리 재생 로직
+  const playSound = () => {
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+    
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    
+    // 볼륨 증가 (0.2 -> 0.5)
+    const volume = 0.5;
+
+    if (type === 'success') {
+      // 🏆 승리/완료 사운드
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(523.25, now); // C5
+      osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
+      osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
+      osc.frequency.setValueAtTime(1046.50, now + 0.3); // C6
+      gain.gain.setValueAtTime(volume, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+      osc.start(now);
+      osc.stop(now + 1.5);
+    } else if (type === 'start') {
+      // 🚀 시작 사운드 (상승음)
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+      gain.gain.setValueAtTime(volume, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+      osc.start(now);
+      osc.stop(now + 0.4);
+    } else {
+      // 🔔 일반 알림 (띵~)
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(440, now + 0.5);
+      gain.gain.setValueAtTime(volume, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      osc.start(now);
+      osc.stop(now + 0.5);
+    }
+  };
+
+  // 모바일 브라우저 정책 대응: suspended 상태면 resume() 후 재생
+  if (ctx.state === 'suspended') {
+    ctx.resume().then(() => {
+      playSound();
+    }).catch(e => console.error(e));
   } else {
-    // 🔔 일반 알림 (띵~)
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(880, now);
-    osc.frequency.exponentialRampToValueAtTime(440, now + 0.5);
-    gain.gain.setValueAtTime(0.2, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
-    osc.start(now);
-    osc.stop(now + 0.5);
+    playSound();
   }
 }
 
@@ -323,14 +339,15 @@ function App() {
     if (step !== 4) return;
 
     // 1. 독서 -> 휴식 전환
-    if (phase === "reading" && phaseSec >= readMin * 60) {
+    // readMin이 문자열일 수 있으므로 숫자 변환 및 비교
+    if (phase === "reading" && Number(readMin) > 0 && phaseSec >= Number(readMin) * 60) {
       playGameBeep('normal'); // 알림음
       setPhase("rest");
       setPhaseSec(0);
       setShowRestModal(true);
     }
     // 2. 휴식 -> 독서 전환
-    if (phase === "rest" && phaseSec >= restMin * 60) {
+    if (phase === "rest" && Number(restMin) > 0 && phaseSec >= Number(restMin) * 60) {
       playGameBeep('normal'); // 알림음
       setPhase("reading");
       setPhaseSec(0);
