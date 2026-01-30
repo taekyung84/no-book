@@ -3,24 +3,99 @@
 <head>
 <meta charset="UTF-8"/>
 <title>Reading Quest</title>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
 <style>
-body{margin:0;font-family:system-ui;background:#f6f6f6}
-.screen{padding:24px;max-width:520px;margin:auto;text-align:center}
-button{padding:14px 20px;margin:8px;font-size:16px}
-input,textarea{width:100%;padding:10px;margin-top:8px;font-size:14px}
-.timer{font-size:48px;margin:12px 0}
-.layout{display:flex;gap:16px}
-.records{flex:1;text-align:left;max-height:320px;overflow:auto;background:#fff;padding:12px;border-radius:8px}
-img.scene{max-width:220px;margin:12px auto;display:block}
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center}
-.modal-box{background:#fff;padding:20px;width:90%;max-width:420px;border-radius:12px;max-height:80vh;overflow:auto}
-.book-title{font-weight:700;margin:6px 0}
-.highlight{font-style:italic;margin:12px 0;padding:8px;background:#f0f0f0;border-radius:6px}
-.record-item{font-size:13px;margin:6px 0}
+  /* 모바일 최적화를 위한 기본 설정 */
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; font-family: -apple-system, system-ui, sans-serif; background: #f6f6f6; }
+  
+  .screen {
+    padding: 20px;
+    max-width: 520px;
+    margin: auto;
+    text-align: center;
+    width: 100%; /* 화면 꽉 차게 */
+  }
+
+  /* 버튼 터치 영역 확보 및 스타일 유지 */
+  button {
+    padding: 14px 20px;
+    margin: 6px;
+    font-size: 16px;
+    cursor: pointer;
+    touch-action: manipulation; /* 터치 지연 방지 */
+  }
+
+  /* 입력창 스타일 유지하되 모바일 줌 방지(16px) 및 박스 모델 수정 */
+  input, textarea {
+    width: 100%;
+    padding: 12px;
+    margin-top: 8px;
+    font-size: 16px; /* iOS 자동 확대 방지 */
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+
+  .timer { font-size: 48px; margin: 12px 0; }
+
+  /* 모바일 레이아웃 핵심 수정: 좁으면 세로로 배치 */
+  .layout {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap; /* 화면 좁을 때 줄바꿈 */
+  }
+  .layout > div {
+    flex: 1;
+    min-width: 280px; /* 너무 좁아지지 않게 방지 */
+  }
+
+  .records {
+    text-align: left;
+    max-height: 320px;
+    overflow-y: auto;
+    background: #fff;
+    padding: 12px;
+    border-radius: 8px;
+    width: 100%; /* flex item 내에서 너비 확보 */
+  }
+
+  /* 이미지 반응형 처리 */
+  img.scene {
+    max-width: 100%;
+    height: auto;
+    width: 220px; /* 원본 의도 크기 */
+    margin: 12px auto;
+    display: block;
+  }
+
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px; /* 모바일 여백 */
+  }
+
+  .modal-box {
+    background: #fff;
+    padding: 20px;
+    width: 100%;
+    max-width: 420px;
+    border-radius: 12px;
+    max-height: 85vh; /* 키보드 올라왔을 때 대응 */
+    overflow-y: auto;
+  }
+
+  .book-title { font-weight: 700; margin: 6px 0; word-break: break-all; }
+  .highlight { font-style: italic; margin: 12px 0; padding: 8px; background: #f0f0f0; border-radius: 6px; word-break: break-word; }
+  .record-item { font-size: 13px; margin: 6px 0; word-break: break-word; }
+  hr { border: 0; border-top: 1px solid #eee; margin: 8px 0; }
 </style>
 </head>
 <body>
@@ -28,7 +103,7 @@ img.scene{max-width:220px;margin:12px auto;display:block}
 <script type="text/babel">
 const {useState,useEffect}=React;
 
-// 🔊 3초 게임형 알림음
+// 🔊 3초 게임형 알림음 (원본 로직 유지)
 function playGameBeep(){
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const gain = ctx.createGain();
@@ -49,128 +124,110 @@ function playGameBeep(){
 }
 
 function App(){
- const[step,setStep]=useState(0);
- const[bookTitle,setBookTitle]=useState("");
- const[totalMinutes,setTotalMinutes]=useState(null);
- const[readMin,setReadMin]=useState(null);
- const[restMin,setRestMin]=useState(null);
+  const[step,setStep]=useState(0);
+  const[bookTitle,setBookTitle]=useState("");
+  const[totalMinutes,setTotalMinutes]=useState(null);
+  const[readMin,setReadMin]=useState(null);
+  const[restMin,setRestMin]=useState(null);
+  
+  const[phase,setPhase]=useState("reading");
+  const[phaseSec,setPhaseSec]=useState(0);
+  const[totalSec,setTotalSec]=useState(0);
+  const[paused,setPaused]=useState(false);
+  
+  const[records,setRecords]=useState([]);
+  const[showRest,setShowRest]=useState(false);
+  const[showEnd,setShowEnd]=useState(false);
+  const[showHighlight,setShowHighlight]=useState(false);
+  const[endType,setEndType]=useState(null);
+  
+  const[page,setPage]=useState("");
+  const[sentence,setSentence]=useState("");
+  const[highlight,setHighlight]=useState("");
 
- const[phase,setPhase]=useState("reading");
- const[phaseSec,setPhaseSec]=useState(0);
- const[totalSec,setTotalSec]=useState(0);
- const[paused,setPaused]=useState(false);
+  useEffect(()=>{
+    if(step!==4||paused||showEnd||showHighlight)return;
+    const id=setInterval(()=>{setPhaseSec(s=>s+1);setTotalSec(s=>s+1)},1000);
+    return()=>clearInterval(id)
+  },[step,paused,showEnd,showHighlight]);
 
- const[records,setRecords]=useState([]);
- const[showRest,setShowRest]=useState(false);
- const[showEnd,setShowEnd]=useState(false);
- const[showHighlight,setShowHighlight]=useState(false);
- const[endType,setEndType]=useState(null);
+  useEffect(()=>{
+    if(step!==4)return;
+    if(phase==="reading"&&phaseSec>=readMin*60){
+      playGameBeep();
+      setPhase("rest");setPhaseSec(0);setShowRest(true);
+    }
+    if(phase==="rest"&&phaseSec>=restMin*60){
+      playGameBeep();
+      setPhase("reading");setPhaseSec(0);
+    }
+    if(totalSec>=totalMinutes*60){
+      playGameBeep();
+      setPaused(true);
+      setEndType("success");
+      setShowHighlight(true);
+    }
+  },[phaseSec,totalSec]);
 
- const[page,setPage]=useState("");
- const[sentence,setSentence]=useState("");
- const[highlight,setHighlight]=useState("");
+  const fmt=s=>String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
 
- useEffect(()=>{if(step!==4||paused||showEnd||showHighlight)return;
-  const id=setInterval(()=>{setPhaseSec(s=>s+1);setTotalSec(s=>s+1)},1000);
-  return()=>clearInterval(id)},[step,paused,showEnd,showHighlight]);
+  if(step===0) return <div className="screen"> <img className="scene" src="start.png" onError={(e)=>e.target.style.display='none'}/> <h1 style={{fontSize:24}}>Reading Quest</h1> <button onClick={()=>setStep(1)}>시작하기</button> </div>;
+  
+  if(step===1) return <div className="screen"> <input placeholder="책 제목" value={bookTitle} onChange={e=>setBookTitle(e.target.value)}/> <button disabled={!bookTitle} onClick={()=>setStep(2)}>확인</button> </div>;
+  
+  if(step===2) return <div className="screen"> <p>목표 시간을 선택하세요</p> {[10,30,60,90].map(t=><button key={t} onClick={()=>{setTotalMinutes(t);setStep(3)}}>{t}분</button>)} </div>;
+  
+  if(step===3) return <div className="screen"> <input type="number" placeholder="독서시간(분)" onChange={e=>setReadMin(+e.target.value)}/> <input type="number" placeholder="쉬는시간(분)" onChange={e=>setRestMin(+e.target.value)}/> <button disabled={!readMin||!restMin} onClick={()=>{setPhase("reading");setPhaseSec(0);setTotalSec(0);setStep(4)}}>시작</button> </div>;
 
- useEffect(()=>{
-  if(step!==4)return;
-  if(phase==="reading"&&phaseSec>=readMin*60){
-    playGameBeep();
-    setPhase("rest");setPhaseSec(0);setShowRest(true);
-  }
-  if(phase==="rest"&&phaseSec>=restMin*60){
-    playGameBeep();
-    setPhase("reading");setPhaseSec(0);
-  }
-  if(totalSec>=totalMinutes*60){
-    playGameBeep();
-    setPaused(true);
-    setEndType("success");
-    setShowHighlight(true);
-  }
- },[phaseSec,totalSec]);
-
- const fmt=s=>String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
-
- if(step===0) return <div className="screen">
-   <img className="scene" src="start.png"/>
-   <button onClick={()=>setStep(1)}>시작하기</button>
- </div>;
-
- if(step===1) return <div className="screen">
-   <input placeholder="책 제목" onChange={e=>setBookTitle(e.target.value)}/>
-   <button disabled={!bookTitle} onClick={()=>setStep(2)}>확인</button>
- </div>;
-
- if(step===2) return <div className="screen">
-   {[10,30,60,90].map(t=><button key={t} onClick={()=>{setTotalMinutes(t);setStep(3)}}>{t}분</button>)}
- </div>;
-
- if(step===3) return <div className="screen">
-   <input type="number" placeholder="독서시간(분)" onChange={e=>setReadMin(+e.target.value)}/>
-   <input type="number" placeholder="쉬는시간(분)" onChange={e=>setRestMin(+e.target.value)}/>
-   <button disabled={!readMin||!restMin} onClick={()=>{setPhase("reading");setPhaseSec(0);setTotalSec(0);setStep(4)}}>시작</button>
- </div>;
-
- return <div className="screen">
-   <h3>{bookTitle}</h3>
-   <img className="scene" src={phase==="reading"?"reading.png":"rest.png"}/>
-   <div className="layout">
-    <div>
-     <div className="timer">{fmt(totalSec)}</div>
-     <button onClick={()=>{
-       setPaused(p=>!p);
-       if(paused) playGameBeep();
-     }}>{paused?"재개":"일시정지"}</button>
-     <button onClick={()=>{
-       playGameBeep();
-       setPaused(true);
-       setEndType("failed");
-       setShowEnd(true);
-     }}>독서 종료</button>
+  return <div className="screen">
+    <h3>{bookTitle}</h3>
+    <img className="scene" src={phase==="reading"?"reading.png":"rest.png"} onError={(e)=>e.target.style.display='none'}/>
+    
+    <div className="layout">
+      <div>
+        <div className="timer">{fmt(totalSec)}</div>
+        <div style={{display:'flex', justifyContent:'center', flexWrap:'wrap'}}>
+          <button onClick={()=>{ setPaused(p=>!p); if(paused) playGameBeep(); }}>{paused?"재개":"일시정지"}</button>
+          <button onClick={()=>{ playGameBeep(); setPaused(true); setEndType("failed"); setShowEnd(true); }}>독서 종료</button>
+        </div>
+      </div>
+      
+      <div className="records">
+        {records.length === 0 && <div style={{color:'#999', textAlign:'center', padding:10}}>기록 없음</div>}
+        {records.map((r,i)=><div key={i}><strong>p.{r.page}</strong><div style={{wordBreak:'break-word'}}>{r.sentence}</div><hr/></div>)}
+      </div>
     </div>
-    <div className="records">
-      {records.map((r,i)=><div key={i}><strong>p.{r.page}</strong><div>{r.sentence}</div><hr/></div>)}
-    </div>
-   </div>
 
-   {showRest&&<div className="modal"><div className="modal-box">
-     <h3>쉬는 시간 기록</h3>
-     <input placeholder="페이지" value={page} onChange={e=>setPage(e.target.value)}/>
-     <textarea placeholder="읽고 있는 문장" value={sentence} onChange={e=>setSentence(e.target.value)}/>
-     <button onClick={()=>{
-       if(page||sentence)setRecords(r=>[...r,{page,sentence}]);
-       setPage("");setSentence("");
-       setShowRest(false);
-     }}>저장하고 계속</button>
-   </div></div>}
+    {showRest&&<div className="modal"><div className="modal-box">
+      <h3>쉬는 시간 기록</h3>
+      <input placeholder="페이지" type="number" value={page} onChange={e=>setPage(e.target.value)}/>
+      <textarea placeholder="읽고 있는 문장" rows={3} value={sentence} onChange={e=>setSentence(e.target.value)}/>
+      <button onClick={()=>{ if(page||sentence)setRecords(r=>[...r,{page,sentence}]); setPage("");setSentence(""); setShowRest(false); }}>저장하고 계속</button>
+    </div></div>}
 
-   {showHighlight&&<div className="modal"><div className="modal-box">
-     <h3>가장 기억에 남는 문장을 입력해주세요.</h3>
-     <textarea value={highlight} onChange={e=>setHighlight(e.target.value)}/>
-     <button disabled={!highlight} onClick={()=>{setShowHighlight(false);setShowEnd(true);}}>입력 완료</button>
-   </div></div>}
+    {showHighlight&&<div className="modal"><div className="modal-box">
+      <h3>가장 기억에 남는 문장</h3>
+      <textarea value={highlight} rows={4} onChange={e=>setHighlight(e.target.value)}/>
+      <button disabled={!highlight} onClick={()=>{setShowHighlight(false);setShowEnd(true);}}>입력 완료</button>
+    </div></div>}
 
-   {showEnd&&<div className="modal"><div className="modal-box">
-     <h2>{endType==="success"?"독서 완료!":"독서 중단"}</h2>
-     <img className="scene" src={endType==="success"?"victory.png":"failed.png"}/>
-     <div className="book-title">{bookTitle}</div>
-     {endType==="success"&&highlight&&<div className="highlight">“{highlight}”</div>}
-     <p>총 시간: {fmt(totalSec)}</p>
-     <h4>📒 독서 중 기록</h4>
-     {records.length===0 && <p>기록 없음</p>}
-     {records.map((r,i)=>(
-       <div key={i} className="record-item">
-         p.{r.page} — {r.sentence}
-       </div>
-     ))}
-     <button onClick={()=>window.location.reload()}>처음으로</button>
-   </div></div>}
- </div>;
+    {showEnd&&<div className="modal"><div className="modal-box">
+      <h2>{endType==="success"?"독서 완료!":"독서 중단"}</h2>
+      <img className="scene" src={endType==="success"?"victory.png":"failed.png"} onError={(e)=>e.target.style.display='none'}/>
+      <div className="book-title">{bookTitle}</div>
+      {endType==="success"&&highlight&&<div className="highlight">“{highlight}”</div>}
+      <p>총 시간: {fmt(totalSec)}</p>
+      <h4>📒 독서 중 기록</h4>
+      {records.length===0 && <p>기록 없음</p>}
+      {records.map((r,i)=>(
+        <div key={i} className="record-item">
+          p.{r.page} — {r.sentence}
+        </div>
+      ))}
+      <button onClick={()=>window.location.reload()}>처음으로</button>
+    </div></div>}
+  </div>;
 }
-
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
