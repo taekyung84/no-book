@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>Reading Quest Mobile</title>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+<style>
+  :root {
+    --primary: #4F46E5;
+    --secondary: #10B981;
+    --accent: #F59E0B;
+    --danger: #EF4444;
+    --bg: #F3F4F6;
+    --card: #FFFFFF;
+    --text: #1F2937;
+    --text-light: #6B7280;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  /* Mobile Container */
+  .app-container {
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    background: var(--card);
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 20px rgba(0,0,0,0.05);
+    position: relative;
+  }
+  .content {
+    flex: 1;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+  }
+  /* Typography */
+  h1, h2, h3 { margin: 0 0 16px 0; text-align: center; color: #111; }
+  p { color: var(--text-light); line-height: 1.5; margin-bottom: 20px; text-align: center; }
+  
+  /* Inputs & Buttons */
+  input, textarea {
+    width: 100%;
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 2px solid #E5E7EB;
+    border-radius: 12px;
+    font-size: 16px; /* iOS zoom prevent */
+    outline: none;
+    transition: 0.2s;
+    appearance: none;
+  }
+  input:focus, textarea:focus { border-color: var(--primary); }
+  
+  button {
+    width: 100%;
+    padding: 18px;
+    border: none;
+    border-radius: 14px;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--primary);
+    color: white;
+    margin-top: 8px;
+    transition: transform 0.1s, opacity 0.2s;
+    box-shadow: 0 4px 6px rgba(79, 70, 229, 0.2);
+  }
+  button:active { transform: scale(0.98); }
+  button:disabled { background: #D1D5DB; box-shadow: none; color: #9CA3AF; }
+  button.secondary { background: #EEF2FF; color: var(--primary); box-shadow: none; }
+  button.danger { background: #FEF2F2; color: var(--danger); box-shadow: none; }
+  button.outline { background: transparent; border: 2px solid #E5E7EB; color: var(--text); box-shadow: none; }
+
+  /* Icon/Emoji Wrapper */
+  .emoji-icon {
+    font-size: 80px;
+    margin-bottom: 24px;
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.1));
+    animation: float 3s ease-in-out infinite;
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  /* Timer Screen Specifics */
+  .timer-display {
+    font-size: 72px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    margin: 20px 0;
+    color: var(--text);
+    letter-spacing: -2px;
+  }
+  .phase-badge {
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .phase-reading { background: #ECFDF5; color: #059669; }
+  .phase-rest { background: #EFF6FF; color: #3B82F6; }
+  .phase-paused { background: #F3F4F6; color: #6B7280; }
+
+  /* Records List */
+  .records-container {
+    width: 100%;
+    margin-top: 24px;
+    background: #F9FAFB;
+    border-radius: 16px;
+    padding: 16px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .record-item {
+    background: white;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-size: 14px;
+    border: 1px solid #E5E7EB;
+  }
+  .record-page { font-weight: 700; color: var(--primary); font-size: 12px; margin-bottom: 4px; display: block;}
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .modal-box {
+    background: white;
+    width: 100%;
+    max-width: 400px;
+    padding: 24px;
+    border-radius: 20px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  /* Grid for time buttons */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+// 🔊 부드러운 알림음
+function playGameBeep(type = 'normal') {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+  const ctx = new AudioContext();
+  const gain = ctx.createGain();
+  gain.connect(ctx.destination);
+  
+  const now = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  
+  if (type === 'success') {
+    // 승리 사운드
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(523.25, now); // C5
+    osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
+    osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
+    osc.frequency.setValueAtTime(1046.50, now + 0.3); // C6
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+    osc.start(now);
+    osc.stop(now + 1.5);
+  } else {
+    // 띵~ 소리
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.exponentialRampToValueAtTime(440, now + 0.5);
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+    osc.start(now);
+    osc.stop(now + 0.5);
+  }
+}
+
+function App() {
+  const [step, setStep] = useState(0);
+  const [bookTitle, setBookTitle] = useState("");
+  const [totalMinutes, setTotalMinutes] = useState(30);
+  const [readMin, setReadMin] = useState("");
+  const [restMin, setRestMin] = useState("");
+
+  const [phase, setPhase] = useState("reading"); // reading | rest
+  const [phaseSec, setPhaseSec] = useState(0);
+  const [totalSec, setTotalSec] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  const [records, setRecords] = useState([]);
+  const [showRestModal, setShowRestModal] = useState(false);
+  const [showEndModal, setShowEndModal] = useState(false);
+  const [showHighlightModal, setShowHighlightModal] = useState(false);
+  const [endType, setEndType] = useState(null); // success | failed
+
+  // Inputs state
+  const [pageInput, setPageInput] = useState("");
+  const [sentenceInput, setSentenceInput] = useState("");
+  const [highlightInput, setHighlightInput] = useState("");
+
+  // Timer Logic
+  useEffect(() => {
+    if (step !== 4 || paused || showEndModal || showHighlightModal || showRestModal) return;
+    
+    const id = setInterval(() => {
+      setPhaseSec(s => s + 1);
+      setTotalSec(s => s + 1);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [step, paused, showEndModal, showHighlightModal, showRestModal]);
+
+  // Phase Transition Logic
+  useEffect(() => {
+    if (step !== 4) return;
+
+    // 1. 독서 -> 휴식 전환
+    if (phase === "reading" && phaseSec >= readMin * 60) {
+      playGameBeep('normal');
+      setPhase("rest");
+      setPhaseSec(0);
+      setShowRestModal(true);
+    }
+    // 2. 휴식 -> 독서 전환
+    if (phase === "rest" && phaseSec >= restMin * 60) {
+      playGameBeep('normal');
+      setPhase("reading");
+      setPhaseSec(0);
+    }
+    // 3. 전체 목표 시간 달성
+    if (totalSec >= totalMinutes * 60) {
+      playGameBeep('success');
+      setPaused(true);
+      setEndType("success");
+      setShowHighlightModal(true);
+    }
+  }, [phaseSec, totalSec, phase, readMin, restMin, totalMinutes, step]);
+
+  const fmt = (s) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  };
+
+  const handleStart = () => {
+    if(!readMin || !restMin) return;
+    setPhase("reading");
+    setPhaseSec(0);
+    setTotalSec(0);
+    setStep(4);
+  };
+
+  // --- Screens ---
+
+  // 0. Welcome
+  if (step === 0) return (
+    <div className="app-container">
+      <div className="content">
+        <div className="emoji-icon">📚</div>
+        <h1>Reading Quest</h1>
+        <p>목표를 설정하고<br/>집중해서 책을 읽어보세요.</p>
+        <div style={{flex:1}}></div>
+        <button onClick={() => setStep(1)}>시작하기</button>
+      </div>
+    </div>
+  );
+
+  // 1. Book Title
+  if (step === 1) return (
+    <div className="app-container">
+      <div className="content">
+        <div className="emoji-icon">📖</div>
+        <h3>어떤 책을 읽나요?</h3>
+        <input 
+          autoFocus
+          placeholder="책 제목 입력" 
+          value={bookTitle}
+          onChange={e => setBookTitle(e.target.value)}
+        />
+        <button disabled={!bookTitle} onClick={() => setStep(2)}>다음</button>
+      </div>
+    </div>
+  );
+
+  // 2. Total Time
+  if (step === 2) return (
+    <div className="app-container">
+      <div className="content">
+        <div className="emoji-icon">⏰</div>
+        <h3>총 독서 목표 시간</h3>
+        <p>오늘은 얼마나 읽으실 건가요?</p>
+        <div className="grid-2">
+          {[10, 30, 45, 60, 90, 120].map(t => (
+            <button 
+              key={t} 
+              className={totalMinutes === t ? "" : "outline"}
+              onClick={() => setTotalMinutes(t)}
+            >
+              {t}분
+            </button>
+          ))}
+        </div>
+        <div style={{marginTop: 24, width: '100%'}}>
+           <button onClick={() => setStep(3)}>확인 ({totalMinutes}분)</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // 3. Interval Settings
+  if (step === 3) return (
+    <div className="app-container">
+      <div className="content">
+        <div className="emoji-icon">⚙️</div>
+        <h3>패턴 설정</h3>
+        <p>집중 시간과 휴식 시간을 정해주세요.</p>
+        
+        <div style={{width:'100%', textAlign:'left'}}>
+          <label style={{fontSize:13, fontWeight:600, color:'#666'}}>집중 시간 (분)</label>
+          <input type="number" pattern="\d*" inputMode="numeric" placeholder="예: 25" value={readMin} onChange={e => setReadMin(e.target.value)}/>
+          
+          <label style={{fontSize:13, fontWeight:600, color:'#666'}}>휴식 시간 (분)</label>
+          <input type="number" pattern="\d*" inputMode="numeric" placeholder="예: 5" value={restMin} onChange={e => setRestMin(e.target.value)}/>
+        </div>
+
+        <button disabled={!readMin || !restMin} onClick={handleStart}>퀘스트 시작!</button>
+      </div>
+    </div>
+  );
+
+  // 4. Main Timer
+  return (
+    <div className="app-container">
+      <div className="content" style={{justifyContent: 'flex-start', paddingTop: 40}}>
+        
+        {/* Status Badge */}
+        <div className={`phase-badge ${paused ? 'phase-paused' : (phase === 'reading' ? 'phase-reading' : 'phase-rest')}`}>
+          {paused ? "일시정지" : (phase === "reading" ? "📖 독서 중" : "☕️ 휴식 중")}
+        </div>
+
+        {/* Timer */}
+        <div className="timer-display" style={{opacity: paused ? 0.5 : 1}}>
+          {fmt(phaseSec)}
+        </div>
+        <div style={{color:'#6B7280', fontSize: 14}}>
+          총 경과 시간: {fmt(totalSec)} / {totalMinutes}분
+        </div>
+
+        {/* Controls */}
+        <div className="grid-2" style={{marginTop: 40}}>
+          <button 
+            className="secondary"
+            onClick={() => {
+              setPaused(p => !p);
+              if (paused) playGameBeep();
+            }}
+          >
+            {paused ? "재개 ▶" : "일시정지 ⏸"}
+          </button>
+          <button 
+            className="danger"
+            onClick={() => {
+              playGameBeep();
+              setPaused(true);
+              setEndType("failed");
+              setShowEndModal(true);
+            }}
+          >
+            종료 ⏹
+          </button>
+        </div>
+        
+        {/* Button to manually add record */}
+        <button 
+            className="outline" 
+            style={{marginTop: 12, borderStyle:'dashed'}}
+            onClick={() => { setPaused(true); setShowRestModal(true); }}
+        >
+            ✍️ 문장 기록하기
+        </button>
+
+        {/* Records List */}
+        {records.length > 0 && (
+          <div className="records-container">
+            <h4 style={{margin:'0 0 12px 0', fontSize:14, color:'#4B5563'}}>📝 기록된 문장들</h4>
+            {records.map((r, i) => (
+              <div key={i} className="record-item">
+                <span className="record-page">p.{r.page}</span>
+                {r.sentence}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* --- Modals --- */}
+      
+      {/* 1. Rest/Record Modal */}
+      {showRestModal && (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <h3>☕️ 잠시 쉴까요?</h3>
+            <p style={{marginBottom:10}}>지금까지 읽은 부분 중<br/>기억하고 싶은 내용을 남겨보세요.</p>
+            <input 
+              placeholder="페이지 (선택)" 
+              type="number" pattern="\d*"
+              value={pageInput} 
+              onChange={e => setPageInput(e.target.value)}
+            />
+            <textarea 
+              placeholder="인상 깊은 문장 (선택)" 
+              rows={3}
+              value={sentenceInput} 
+              onChange={e => setSentenceInput(e.target.value)}
+            />
+            <div className="grid-2">
+                <button className="secondary" onClick={() => {
+                    setPageInput(""); setSentenceInput("");
+                    setShowRestModal(false);
+                    if(phase === "reading") setPaused(false); // 수동 기록시 재개
+                }}>건너뛰기</button>
+                <button onClick={() => {
+                    if (pageInput || sentenceInput) setRecords(r => [{ page: pageInput || '-', sentence: sentenceInput || '내용 없음' }, ...r]);
+                    setPageInput(""); setSentenceInput("");
+                    setShowRestModal(false);
+                    if(phase === "reading") setPaused(false); // 수동 기록시 재개
+                }}>저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Highlight Modal (Success End) */}
+      {showHighlightModal && (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <div style={{fontSize: 40, textAlign:'center', marginBottom:10}}>🏆</div>
+            <h3>목표 달성!</h3>
+            <p>오늘 가장 기억에 남는<br/>단 하나의 문장은 무엇인가요?</p>
+            <textarea 
+              autoFocus
+              placeholder="여기에 적어주세요..." 
+              rows={4}
+              value={highlightInput} 
+              onChange={e => setHighlightInput(e.target.value)}
+            />
+            <button disabled={!highlightInput} onClick={() => {
+              setShowHighlightModal(false);
+              setShowEndModal(true);
+            }}>
+              입력 완료
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Final Report Modal */}
+      {showEndModal && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{maxHeight:'85vh', overflowY:'auto'}}>
+            <div style={{fontSize: 50, textAlign:'center', marginBottom:10}}>
+                {endType === "success" ? "🎉" : "👋"}
+            </div>
+            <h2>{endType === "success" ? "독서 완료!" : "다음에 또 봐요!"}</h2>
+            <p style={{fontWeight:'bold', color:'var(--primary)'}}>{bookTitle}</p>
+            
+            <div style={{background:'#F3F4F6', padding:16, borderRadius:12, textAlign:'center', margin:'16px 0'}}>
+                <div style={{fontSize:13, color:'#666'}}>총 집중 시간</div>
+                <div style={{fontSize:24, fontWeight:'bold'}}>{fmt(totalSec)}</div>
+            </div>
+
+            {endType === "success" && highlightInput && (
+              <div style={{margin:'20px 0', fontStyle:'italic', color:'#374151', borderLeft:'4px solid var(--primary)', paddingLeft:12}}>
+                “{highlightInput}”
+              </div>
+            )}
+
+            {records.length > 0 && (
+                <div style={{textAlign:'left', marginTop:20}}>
+                    <h4 style={{fontSize:14, marginBottom:8}}>📒 저장한 문장들</h4>
+                    {records.map((r,i) => (
+                        <div key={i} style={{fontSize:13, marginBottom:6, color:'#4B5563'}}>
+                           • p.{r.page} : {r.sentence}
+                        </div>
+                    ))}
+                </div>
+            )}
+            
+            <button style={{marginTop:24}} onClick={() => window.location.reload()}>
+                처음으로 돌아가기
+            </button>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>
