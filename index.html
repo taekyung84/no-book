@@ -101,9 +101,9 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState,useEffect}=React;
+const {useState,useEffect,useRef}=React;
 
-// 🔊 3초 게임형 알림음 (원본 로직 유지)
+// 🔊 3초 게임형 알림음
 function playGameBeep(){
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const gain = ctx.createGain();
@@ -145,17 +145,68 @@ function App(){
   const[sentence,setSentence]=useState("");
   const[highlight,setHighlight]=useState("");
 
+  // Wake Lock 참조 (화면 꺼짐 방지용)
+  const wakeLockRef = useRef(null);
+
+  // 1. 화면 꺼짐 방지 (Wake Lock API) - 에러 핸들링 수정
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      // 브라우저가 지원하는지 먼저 확인
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
+          console.log('Screen Wake Lock Active');
+        } catch (err) {
+          // NotAllowedError 등 권한 문제는 자연스러운 현상이므로 에러가 아닌 로그로 처리
+          console.log(`Wake Lock request skipped (policy/background): ${err.name}`);
+        }
+      }
+    };
+
+    // step 4(독서 중)이고 종료 상황이 아닐 때 락 요청
+    if (step === 4 && !showEnd) {
+      requestWakeLock();
+    } else {
+      // 그 외 상황에서는 락 해제
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {}); // 해제 에러 무시
+        wakeLockRef.current = null;
+      }
+    }
+
+    // 화면 가시성 변경 시(앱 전환 후 복귀 등) 재요청 로직
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && step === 4 && !showEnd) {
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+        wakeLockRef.current = null;
+      }
+    };
+  }, [step, showEnd]);
+
+  // 2. 타이머 로직 수정: showRest(쉬는 시간 기록 중)일 때 타이머 멈춤
   useEffect(()=>{
-    if(step!==4||paused||showEnd||showHighlight)return;
+    // showRest가 true이면 타이머가 흐르지 않도록 조건 추가 (paused || showRest ...)
+    if(step!==4||paused||showEnd||showHighlight||showRest) return;
+    
     const id=setInterval(()=>{setPhaseSec(s=>s+1);setTotalSec(s=>s+1)},1000);
     return()=>clearInterval(id)
-  },[step,paused,showEnd,showHighlight]);
+  },[step,paused,showEnd,showHighlight,showRest]); // showRest 의존성 추가
 
   useEffect(()=>{
     if(step!==4)return;
     if(phase==="reading"&&phaseSec>=readMin*60){
       playGameBeep();
-      setPhase("rest");setPhaseSec(0);setShowRest(true);
+      setPhase("rest");
+      setPhaseSec(0);
+      setShowRest(true); // 여기서 showRest가 true가 되며 타이머는 멈춤
     }
     if(phase==="rest"&&phaseSec>=restMin*60){
       playGameBeep();
@@ -200,9 +251,10 @@ function App(){
 
     {showRest&&<div className="modal"><div className="modal-box">
       <h3>쉬는 시간 기록</h3>
+      <p style={{fontSize:14, color:'#666', marginBottom:10}}>작성 중에는 시간이 흐르지 않습니다.</p>
       <input placeholder="페이지" type="number" value={page} onChange={e=>setPage(e.target.value)}/>
       <textarea placeholder="읽고 있는 문장" rows={3} value={sentence} onChange={e=>setSentence(e.target.value)}/>
-      <button onClick={()=>{ if(page||sentence)setRecords(r=>[...r,{page,sentence}]); setPage("");setSentence(""); setShowRest(false); }}>저장하고 계속</button>
+      <button onClick={()=>{ if(page||sentence)setRecords(r=>[...r,{page,sentence}]); setPage("");setSentence(""); setShowRest(false); }}>저장하고 계속(쉬는시간 시작)</button>
     </div></div>}
 
     {showHighlight&&<div className="modal"><div className="modal-box">
