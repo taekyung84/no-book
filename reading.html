@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<title>Reading Quest Mobile</title>
+<title>만독기</title>
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-<script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+<!-- FIX: Babel 6 -> Babel 7 (최신 문법 지원) -->
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
   :root {
     --primary: #4F46E5;
@@ -17,6 +18,7 @@
     --card: #FFFFFF;
     --text: #1F2937;
     --text-light: #6B7280;
+    --ai-color: #8B5CF6; /* AI Feature Color */
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -80,12 +82,17 @@
     margin-top: 8px;
     transition: transform 0.1s, opacity 0.2s;
     box-shadow: 0 4px 6px rgba(79, 70, 229, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
   }
   button:active { transform: scale(0.98); }
-  button:disabled { background: #D1D5DB; box-shadow: none; color: #9CA3AF; }
+  button:disabled { background: #D1D5DB; box-shadow: none; color: #9CA3AF; cursor: not-allowed; }
   button.secondary { background: #EEF2FF; color: var(--primary); box-shadow: none; }
   button.danger { background: #FEF2F2; color: var(--danger); box-shadow: none; }
   button.outline { background: transparent; border: 2px solid #E5E7EB; color: var(--text); box-shadow: none; }
+  button.ai-btn { background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%); color: white; box-shadow: 0 4px 10px rgba(139, 92, 246, 0.3); }
 
   /* Icon/Emoji Wrapper */
   .emoji-icon {
@@ -167,6 +174,29 @@
 
   /* Grid for time buttons */
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
+  
+  /* Loading Spinner */
+  .spinner {
+    border: 3px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top: 3px solid #fff;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+  /* AI Response Box */
+  .ai-response {
+    background: #F5F3FF;
+    border: 1px solid #C4B5FD;
+    color: #5B21B6;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
 </style>
 </head>
 <body>
@@ -175,7 +205,37 @@
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
-// 🔊 부드러운 알림음
+// --- Gemini API Setup ---
+const apiKey = ""; // Environment handles the key
+
+async function callGemini(prompt) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+  const payload = {
+    contents: [{ parts: [{ text: prompt }] }],
+    systemInstruction: { parts: [{ text: "You are a helpful and encouraging reading assistant. Respond in Korean. Keep responses concise and insightful." }] }
+  };
+
+  let delay = 1000;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || "AI 응답을 불러올 수 없습니다.";
+    } catch (e) {
+      console.warn(`Attempt ${i + 1} failed:`, e);
+      if (i === 2) return "죄송합니다. AI 연결에 실패했습니다. 잠시 후 다시 시도해주세요.";
+      await new Promise(res => setTimeout(res, delay));
+      delay *= 2;
+    }
+  }
+}
+
+// 🔊 효과음 함수
 function playGameBeep(type = 'normal') {
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   if (!AudioContext) return;
@@ -187,7 +247,7 @@ function playGameBeep(type = 'normal') {
   const osc = ctx.createOscillator();
   
   if (type === 'success') {
-    // 승리 사운드
+    // 🏆 승리/완료 사운드
     osc.type = "triangle";
     osc.frequency.setValueAtTime(523.25, now); // C5
     osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
@@ -197,8 +257,17 @@ function playGameBeep(type = 'normal') {
     gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
     osc.start(now);
     osc.stop(now + 1.5);
+  } else if (type === 'start') {
+    // 🚀 시작 사운드 (상승음)
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(440, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+    osc.start(now);
+    osc.stop(now + 0.4);
   } else {
-    // 띵~ 소리
+    // 🔔 일반 알림 (띵~)
     osc.type = "sine";
     osc.frequency.setValueAtTime(880, now);
     osc.frequency.exponentialRampToValueAtTime(440, now + 0.5);
@@ -232,6 +301,56 @@ function App() {
   const [sentenceInput, setSentenceInput] = useState("");
   const [highlightInput, setHighlightInput] = useState("");
 
+  // AI States
+  const [aiInsight, setAiInsight] = useState("");
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiReport, setAiReport] = useState("");
+  const [isReportLoading, setIsReportLoading] = useState(false);
+
+  // --- 화면 꺼짐 방지 (Wake Lock) ---
+  useEffect(() => {
+    let wakeLock = null;
+
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          console.log('Screen Wake Lock acquired');
+        }
+      } catch (err) {
+        console.warn('Wake Lock error:', err);
+      }
+    };
+
+    const releaseWakeLock = async () => {
+      if (wakeLock) {
+        await wakeLock.release();
+        wakeLock = null;
+        console.log('Screen Wake Lock released');
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && step === 4 && !paused) {
+        requestWakeLock();
+      }
+    };
+
+    // 독서 진행 중(Step 4)이고 일시정지가 아닐 때 Lock 요청
+    if (step === 4 && !paused && !showEndModal) {
+      requestWakeLock();
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    } else {
+      releaseWakeLock();
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      releaseWakeLock();
+    };
+  }, [step, paused, showEndModal]);
+
+
   // Timer Logic
   useEffect(() => {
     if (step !== 4 || paused || showEndModal || showHighlightModal || showRestModal) return;
@@ -243,26 +362,27 @@ function App() {
     return () => clearInterval(id);
   }, [step, paused, showEndModal, showHighlightModal, showRestModal]);
 
-  // Phase Transition Logic
+  // Phase Transition Logic (알림음 포함)
   useEffect(() => {
     if (step !== 4) return;
 
     // 1. 독서 -> 휴식 전환
     if (phase === "reading" && phaseSec >= readMin * 60) {
-      playGameBeep('normal');
+      playGameBeep('normal'); // 알림음
       setPhase("rest");
       setPhaseSec(0);
       setShowRestModal(true);
+      setAiInsight("");
     }
     // 2. 휴식 -> 독서 전환
     if (phase === "rest" && phaseSec >= restMin * 60) {
-      playGameBeep('normal');
+      playGameBeep('normal'); // 알림음
       setPhase("reading");
       setPhaseSec(0);
     }
     // 3. 전체 목표 시간 달성
     if (totalSec >= totalMinutes * 60) {
-      playGameBeep('success');
+      playGameBeep('success'); // 알림음
       setPaused(true);
       setEndType("success");
       setShowHighlightModal(true);
@@ -277,15 +397,44 @@ function App() {
 
   const handleStart = () => {
     if(!readMin || !restMin) return;
+    playGameBeep('start'); // 시작 알림음 추가
     setPhase("reading");
     setPhaseSec(0);
     setTotalSec(0);
     setStep(4);
   };
 
+  // --- Gemini Action Handlers ---
+
+  const handleAiInsight = async () => {
+    if (!sentenceInput) return;
+    setIsAiLoading(true);
+    setAiInsight("");
+    const prompt = `책 제목: ${bookTitle}. 사용자가 기록한 문장: "${sentenceInput}". 이 문장에 대해 짤막하고 철학적이거나 격려가 되는 코멘트를 한국어로 한 문장만 작성해줘.`;
+    const result = await callGemini(prompt);
+    setAiInsight(result);
+    setIsAiLoading(false);
+  };
+
+  const handleAiReport = async () => {
+    setIsReportLoading(true);
+    const recordsText = records.map(r => `p.${r.page}: ${r.sentence}`).join("\n");
+    const prompt = `책 제목: ${bookTitle}. 
+    사용자의 독서 기록:
+    ${recordsText}
+    
+    사용자가 꼽은 최고의 문장: "${highlightInput}"
+    
+    위 내용을 바탕으로 오늘의 독서를 칭찬하고 내용을 요약하는 짧은 리포트(3문장 이내)를 작성해줘. 따뜻하고 지적인 어조로.`;
+    
+    const result = await callGemini(prompt);
+    setAiReport(result);
+    setIsReportLoading(false);
+  };
+
   // --- Screens ---
 
-  // 0. Welcome
+  // 0. Welcome (텍스트 수정)
   if (step === 0) return (
     <div className="app-container">
       <div className="content">
@@ -407,7 +556,7 @@ function App() {
         <button 
             className="outline" 
             style={{marginTop: 12, borderStyle:'dashed'}}
-            onClick={() => { setPaused(true); setShowRestModal(true); }}
+            onClick={() => { setPaused(true); setShowRestModal(true); setAiInsight(""); }}
         >
             ✍️ 문장 기록하기
         </button>
@@ -433,7 +582,7 @@ function App() {
         <div className="modal-overlay">
           <div className="modal-box">
             <h3>☕️ 잠시 쉴까요?</h3>
-            <p style={{marginBottom:10}}>지금까지 읽은 부분 중<br/>기억하고 싶은 내용을 남겨보세요.</p>
+            <p style={{marginBottom:10}}>기억하고 싶은 내용을 남겨보세요.</p>
             <input 
               placeholder="페이지 (선택)" 
               type="number" pattern="\d*"
@@ -441,22 +590,43 @@ function App() {
               onChange={e => setPageInput(e.target.value)}
             />
             <textarea 
-              placeholder="인상 깊은 문장 (선택)" 
+              placeholder="인상 깊은 문장" 
               rows={3}
               value={sentenceInput} 
               onChange={e => setSentenceInput(e.target.value)}
             />
+
+            {/* AI Insight Button */}
+            {sentenceInput && !aiInsight && (
+               <button 
+                 className="ai-btn" 
+                 style={{padding: '10px', fontSize: '14px', marginBottom: '12px', width: 'auto', display: 'inline-flex'}}
+                 onClick={handleAiInsight}
+                 disabled={isAiLoading}
+               >
+                 {isAiLoading ? <div className="spinner"></div> : "✨ AI 생각 더하기"}
+               </button>
+            )}
+
+            {/* AI Response Display */}
+            {aiInsight && (
+              <div className="ai-response">
+                <strong>✨ Gemini:</strong><br/>
+                {aiInsight}
+              </div>
+            )}
+
             <div className="grid-2">
                 <button className="secondary" onClick={() => {
-                    setPageInput(""); setSentenceInput("");
+                    setPageInput(""); setSentenceInput(""); setAiInsight("");
                     setShowRestModal(false);
-                    if(phase === "reading") setPaused(false); // 수동 기록시 재개
+                    if(phase === "reading") setPaused(false);
                 }}>건너뛰기</button>
                 <button onClick={() => {
                     if (pageInput || sentenceInput) setRecords(r => [{ page: pageInput || '-', sentence: sentenceInput || '내용 없음' }, ...r]);
-                    setPageInput(""); setSentenceInput("");
+                    setPageInput(""); setSentenceInput(""); setAiInsight("");
                     setShowRestModal(false);
-                    if(phase === "reading") setPaused(false); // 수동 기록시 재개
+                    if(phase === "reading") setPaused(false);
                 }}>저장</button>
             </div>
           </div>
@@ -506,6 +676,25 @@ function App() {
               <div style={{margin:'20px 0', fontStyle:'italic', color:'#374151', borderLeft:'4px solid var(--primary)', paddingLeft:12}}>
                 “{highlightInput}”
               </div>
+            )}
+
+            {/* AI Report Section */}
+            {endType === "success" && !aiReport && (
+                <button 
+                  className="ai-btn" 
+                  style={{marginBottom: 20}}
+                  onClick={handleAiReport}
+                  disabled={isReportLoading}
+                >
+                  {isReportLoading ? <div className="spinner"></div> : "✨ AI 독서 리포트 생성"}
+                </button>
+            )}
+
+            {aiReport && (
+                <div className="ai-response" style={{background: '#F0F9FF', borderColor:'#BAE6FD', color:'#0369A1'}}>
+                    <strong>✨ 오늘의 독서 요약:</strong><br/>
+                    {aiReport}
+                </div>
             )}
 
             {records.length > 0 && (
